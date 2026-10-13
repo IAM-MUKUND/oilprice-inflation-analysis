@@ -1,0 +1,52 @@
+# Final model and diagnostics — Gretl
+# Expected monthly dataset; final estimation sample 2015:01–2025:12.
+
+summary cpi_inflation_yoy_pct cpi_combined_index \
+    oil_price_usd_bbl oil_change_pct oil_log_return_pct \
+  oil_volatility_3m usd_inr_monthly_avg usd_inr_change_pct
+  
+# Main levels and volatility measures
+corr cpi_inflation_yoy_pct cpi_combined_index \
+    oil_price_usd_bbl oil_volatility_3m usd_inr_monthly_avg
+
+# Monthly changes and returns
+corr cpi_inflation_yoy_pct oil_change_pct \
+  oil_log_return_pct oil_volatility_3m usd_inr_change_pct
+
+# OLS final model
+ols cpi_inflation_yoy_pct const cpi_inflation_yoy_pct(-1) \
+    cpi_inflation_yoy_pct(-2) cpi_inflation_yoy_pct(-12) \
+    oil_volatility_3m(-1) usd_inr_change_pct
+series model6_residuals = $uhat
+series model6_fitted = $yhat
+
+# White heteroskedasticity test and residual autocorrelation
+modtest --white
+modtest 12 --autocorr
+corrgm model6_residuals 24
+
+# Newey–West HAC standard errors (Bartlett kernel, bandwidth 4)
+set hac_kernel bartlett
+set hac_lag 4
+set hac_prewhiten off
+ols cpi_inflation_yoy_pct const cpi_inflation_yoy_pct(-1) \
+    cpi_inflation_yoy_pct(-2) cpi_inflation_yoy_pct(-12) \
+  oil_volatility_3m(-1) usd_inr_change_pct --robust
+  
+
+gnuplot cpi_inflation_yoy_pct --time-series --with-lines
+
+gnuplot oil_price_usd_bbl --time-series --with-lines
+
+gnuplot oil_volatility_3m --time-series --with-lines
+
+gnuplot usd_inr_monthly_avg --time-series --with-lines
+
+# Inflation vs oil volatility
+gnuplot cpi_inflation_yoy_pct oil_volatility_3m
+
+# Inflation vs oil-price changes
+gnuplot cpi_inflation_yoy_pct oil_change_pct
+
+# Inflation vs exchange-rate changes
+gnuplot cpi_inflation_yoy_pct usd_inr_change_pct
