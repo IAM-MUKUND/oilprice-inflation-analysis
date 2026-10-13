@@ -1,0 +1,207 @@
+summary cpi_inflation_yoy_pct oil_price_usd_bbl usd_inr_monthly_avg \
+  oil_change_pct oil_log_return_pct oil_volatility_3m usd_inr_change_pct
+
+corr cpi_inflation_yoy_pct oil_price_usd_bbl usd_inr_monthly_avg \
+  oil_change_pct oil_log_return_pct oil_volatility_3m usd_inr_change_pct
+  
+#gnuplot cpi_inflation_yoy_pct --time-series --with-lines --output=display
+#gnuplot oil_price_usd_bbl --time-series --with-lines --output=display
+#gnuplot usd_inr_monthly_avg --time-series --with-lines --output=display
+
+## now testing the lag...
+
+adf 6 usd_inr_monthly_avg --ct
+
+## Now... include an intercept, but no deterministic time trend.
+
+printf "\n ADF: OIL LOG RETURNS\N"
+adf 6 oil_log_return_pct --c
+
+## Now... Include an intercept, but no deterministic time trend.
+
+printf "\n ADF: USD/INR MONTHLY CHANGES \n"
+adf 6 usd_inr_change_pct --c
+
+# ============================================================
+# STEP 3: ADF LAG SENSITIVITY ANALYSIS
+# Variable: USD/INR exchange-rate level
+# Deterministic terms: Constant + linear trend
+# ============================================================
+#printf "\n===== USD/INR: ADF WITH 2 LAGS =====\n"
+#adf 2 usd_inr_monthly_avg --ct
+#printf "\n===== USD/INR: ADF WITH 3 LAGS =====\n"
+#adf 3 usd_inr_monthly_avg --ct
+#printf "\n===== USD/INR: ADF WITH 6 LAGS =====\n"
+#adf 6 usd_inr_monthly_avg --ct
+#printf "\n===== USD/INR: ADF WITH 12 LAGS =====\n"
+#adf 12 usd_inr_monthly_avg --ct
+
+# ------------------------------------------------------------
+# CPI INFLATION: CONSTANT
+# ------------------------------------------------------------
+#printf "\n===== CPI INFLATION: 2 LAGS =====\n"
+#adf 2 cpi_inflation_yoy_pct --c
+#printf "\n===== CPI INFLATION: 3 LAGS =====\n"
+#adf 3 cpi_inflation_yoy_pct --c
+#printf "\n===== CPI INFLATION: 6 LAGS =====\n"
+#adf 6 cpi_inflation_yoy_pct --c
+#printf "\n===== CPI INFLATION: 12 LAGS =====\n"
+#adf 12 cpi_inflation_yoy_pct --c
+
+# ------------------------------------------------------------
+# OIL PRICE TEST
+# ------------------------------------------------------------
+#adf 2 oil_price_usd_bbl --ct
+#adf 3 oil_price_usd_bbl --ct
+#adf 6 oil_price_usd_bbl --ct
+#adf 12 oil_price_usd_bbl --ct
+
+# ============================================================
+# STEP 5: ADF WITH AUTOMATIC DOWNWARD LAG SELECTION
+# Maximum augmentation lag: 12
+# ============================================================
+#printf "\n===== CPI INFLATION =====\n"
+#adf 12 cpi_inflation_yoy_pct --c --test-down
+#printf "\n===== OIL PRICE LEVEL =====\n"
+#adf 12 oil_price_usd_bbl --ct --test-down
+#printf "\n===== USD/INR LEVEL =====\n"
+#adf 12 usd_inr_monthly_avg --ct --test-down
+
+
+
+# ============================================================
+# STEP 6: BASELINE OLS REGRESSION
+# Dependent variable: CPI inflation
+# ============================================================
+
+ols cpi_inflation_yoy_pct const oil_change_pct usd_inr_change_pct
+
+# Display fitted values and residuals for later diagnostics
+series baseline_residuals = $uhat
+series baseline_fitted = $yhat
+
+
+# STEP 7: TEST FOR RESIDUAL AUTOCORRELATION
+modtest 12 --autocorr
+
+
+
+# STEP 8: MODEL 2 - ADD INFLATION PERSISTENCE
+ols cpi_inflation_yoy_pct const cpi_inflation_yoy_pct(-1) oil_change_pct usd_inr_change_pct
+
+series model2_residuals = $uhat
+series model2_fitted = $yhat
+
+# Test residual autocorrelation again
+modtest 12 --autocorr
+
+
+# STEP 9: ADF TEST ON MODEL 2 RESIDUALS
+adf 6 model2_residuals --c
+
+
+# STEP 10: INSPECT MODEL 2 RESIDUAL CORRELATION
+
+corrgm model2_residuals 24
+
+
+# STEP 11: ADD A SECOND LAG OF INFLATION
+
+ols cpi_inflation_yoy_pct const cpi_inflation_yoy_pct(-1) cpi_inflation_yoy_pct(-2) oil_change_pct usd_inr_change_pct
+
+series model3_residuals = $uhat
+series model3_fitted = $yhat
+
+# Test for residual autocorrelation
+modtest 12 --autocorr
+
+# Inspect residual correlation
+corrgm model3_residuals 24
+
+
+
+# STEP 12: INSPECT CPI INFLATION AND CPI INDEX
+#gnuplot cpi_inflation_yoy_pct --time-series --with-lines --output=display
+#gnuplot cpi_combined_index --time-series --with-lines --output=display
+
+# Inspect the final observations
+print cpi_inflation_yoy_pct cpi_combined_index --byobs
+
+
+
+
+# STEP 13: MODEL 4 — ADD THE 12-MONTH INFLATION LAG
+
+ols cpi_inflation_yoy_pct const \
+    cpi_inflation_yoy_pct(-1) \
+    cpi_inflation_yoy_pct(-2) \
+    cpi_inflation_yoy_pct(-12) \
+    oil_change_pct usd_inr_change_pct
+
+series model4_residuals = $uhat
+series model4_fitted = $yhat
+
+modtest 12 --autocorr
+corrgm model4_residuals 24
+
+
+# STEP 14: MODEL 5 — OIL PRICE VOLATILITY
+
+ols cpi_inflation_yoy_pct const \
+    cpi_inflation_yoy_pct(-1) \
+    cpi_inflation_yoy_pct(-2) \
+    cpi_inflation_yoy_pct(-12) \
+    oil_volatility_3m usd_inr_change_pct
+
+series model5_residuals = $uhat
+series model5_fitted = $yhat
+
+modtest 12 --autocorr
+corrgm model5_residuals 24
+
+# STEP 15: PLOT MODEL 5 RESIDUALS
+
+#gnuplot model5_residuals --time-series --with-lines --output=display
+
+
+# STEP 16: TEST FOR HETEROSKEDASTICITY
+
+modtest --white
+
+
+# STEP 17: ONE-MONTH LAGGED OIL VOLATILITY
+
+ols cpi_inflation_yoy_pct const \
+    cpi_inflation_yoy_pct(-1) \
+    cpi_inflation_yoy_pct(-2) \
+    cpi_inflation_yoy_pct(-12) \
+    oil_volatility_3m(-1) \
+    usd_inr_change_pct
+
+modtest --white
+
+# STEP 18: FINAL AUTOCORRELATION CHECK
+modtest 12 --autocorr
+
+
+# ============================================================
+# STEP 19: MODEL 6 — NEWEY-WEST HAC STANDARD ERRORS
+# In Gretl, --hac is NOT a valid flag.
+# For time-series datasets, --robust automatically applies
+# Newey-West HAC (not plain HC).
+# Kernel : Bartlett (Gretl default)
+# Bandwidth: 4 lags (set explicitly below)
+# Pre-whitening: off (plain Newey-West)
+# ============================================================
+
+set hac_kernel bartlett
+set hac_lag 4
+set hac_prewhiten off
+
+ols cpi_inflation_yoy_pct const \
+    cpi_inflation_yoy_pct(-1) \
+    cpi_inflation_yoy_pct(-2) \
+    cpi_inflation_yoy_pct(-12) \
+    oil_volatility_3m(-1) \
+    usd_inr_change_pct \
+    --robust
